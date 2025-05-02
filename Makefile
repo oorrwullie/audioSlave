@@ -5,44 +5,53 @@ LAUNCH_AGENT_NAME=com.$(GITHUB_HANDLE).$(APP_NAME)
 INSTALL_DIR=/usr/local/bin
 CONFIG_DIR=/usr/local/etc/$(APP_NAME)
 PLIST_DIR=~/Library/LaunchAgents
+KEYCHAIN_SERVICE=audioSlave
 
 # Files
-CONFIG_FILE=config.json
 PLIST_FILE=$(LAUNCH_AGENT_NAME).plist
 
-# Targets
 all: build
 
 build:
-\tgo build -o $(APP_NAME) main.go
+	go build -o $(APP_NAME) main.go || { echo "Build failed"; exit 1; }
 
 install: build
-\t# Install binary
-\tsudo mv $(APP_NAME) $(INSTALL_DIR)/$(APP_NAME)
-\tsudo chmod +x $(INSTALL_DIR)/$(APP_NAME)
+	# Install binary
+	sudo mv $(APP_NAME) $(INSTALL_DIR)/$(APP_NAME)
+	sudo chmod +x $(INSTALL_DIR)/$(APP_NAME)
 
-\t# Install config
-\tsudo mkdir -p $(CONFIG_DIR)
-\tsudo cp $(CONFIG_FILE) $(CONFIG_DIR)/$(CONFIG_FILE)
+	# Install LaunchAgent
+	mkdir -p $(PLIST_DIR)
+	cp $(PLIST_FILE) $(PLIST_DIR)/$(PLIST_FILE)
 
-\t# Install LaunchAgent
-\tmkdir -p $(PLIST_DIR)
-\tcp $(PLIST_FILE) $(PLIST_DIR)/$(PLIST_FILE)
+	# Load LaunchAgent
+	launchctl unload $(PLIST_DIR)/$(PLIST_FILE) || true
+	launchctl load $(PLIST_DIR)/$(PLIST_FILE)
 
-\t# Load LaunchAgent
-\tlaunchctl unload $(PLIST_DIR)/$(PLIST_FILE) || true
-\tlaunchctl load $(PLIST_DIR)/$(PLIST_FILE)
+	@echo "⚙️  Now run 'make configure' to set up your configuration."
+
+configure:
+	$(INSTALL_DIR)/$(APP_NAME) configure
 
 uninstall:
-\t# Unload LaunchAgent
-\tlaunchctl unload $(PLIST_DIR)/$(PLIST_FILE) || true
+	# Unload LaunchAgent
+	launchctl unload $(PLIST_DIR)/$(PLIST_FILE) || true
 
-\t# Remove installed files
-\tsudo rm -f $(INSTALL_DIR)/$(APP_NAME)
-\tsudo rm -rf $(CONFIG_DIR)
-\trm -f $(PLIST_DIR)/$(PLIST_FILE)
+	# Remove installed files
+	sudo rm -f $(INSTALL_DIR)/$(APP_NAME)
+	rm -f $(PLIST_DIR)/$(PLIST_FILE)
+
+	@echo "🧹 AudioSlave uninstalled (config preserved). Run 'make reset' to fully wipe data."
+
+reset:
+	@echo "⚠️  This will remove configuration and credentials. Proceeding..."
+	sudo rm -rf $(CONFIG_DIR)
+
+	@security delete-generic-password -s $(KEYCHAIN_SERVICE) 2>/dev/null || true
+
+	@echo "🗑️  All configuration and credentials removed."
 
 clean:
-\trm -f $(APP_NAME)
+	rm -f $(APP_NAME)
 
-.PHONY: all build install uninstall clean
+.PHONY: all build install configure uninstall reset clean

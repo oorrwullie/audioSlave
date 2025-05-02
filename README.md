@@ -1,4 +1,3 @@
-
 # audioSlave
 
 **audioSlave** is a lightweight Go service that monitors your MacBook's lock/unlock state and automatically controls a HomeKit plug based on your DAC connection status.
@@ -61,34 +60,17 @@ This will guide you through:
 - Setting the expected sample rate
 - Entering your Homebridge base URL
 
-It will generate a `config.json` file at `/usr/local/etc/audioSlave/config.json`.
-
 ---
 
 ## 📋 Commands
 
-| Command | Description |
-|:--------|:------------|
-| `make install` | Build and install the app, config, and LaunchAgent |
-| `make uninstall` | Remove everything |
-| `make clean` | Clean the local build |
-| `audioSlave configure` | Run the configuration wizard |
-| `audioSlave` | Start the service manually (normally handled by LaunchAgent) |
-
----
-
-## 🔧 Configuration File
-
-Example `config.json`:
-
-```json
-{
-  "dac_name": "Fosi Audio GR40",
-  "sample_rate": "384000",
-  "homebridge_on_url": "http://homebridge.local:9000/plug/on",
-  "homebridge_off_url": "http://homebridge.local:9000/plug/off"
-}
-```
+| Command              | Description                                |
+|----------------------|--------------------------------------------|
+| `make install`       | Build and install the app and LaunchAgent  |
+| `make uninstall`     | Remove all installed components            |
+| `make clean`         | Remove local build artifacts               |
+| `make configure`     | Run the configuration wizard               |
+| `audioSlave`         | Start the service manually                 |
 
 ---
 
@@ -113,4 +95,3 @@ MIT License
 ## ✍️ Author
 
 Built with ❤️ by [oorrwullie](https://github.com/oorrwullie)
-
