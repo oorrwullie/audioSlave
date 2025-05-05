@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,11 +19,22 @@ func main() {
 	flag.Parse()
 
 	if *configure {
-		if _, err := config.New(); err != nil {
-			println("Configuration failed:", err.Error())
+		cfg, err := config.New()
+		if err != nil {
+			fmt.Printf("❌ Configuration failed: %v\n", err)
 			os.Exit(1)
 		}
-		return
+
+		if cfg != nil {
+			fmt.Println("✅ Configuration already exists.")
+			fmt.Println("")
+			fmt.Println("📌 To run the app automatically on startup, use:")
+			fmt.Printf("   launchctl bootstrap gui/%d ~/Library/LaunchAgents/com.oorrwullie.audioSlave.plist\n", os.Getuid())
+			fmt.Println("")
+			fmt.Println("Or reboot your system — it will auto-start via launchd.")
+		}
+
+		os.Exit(0)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

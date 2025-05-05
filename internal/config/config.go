@@ -14,15 +14,20 @@ import (
 )
 
 type Config struct {
-	DACName    string `json:"dac_name"`
-	SampleRate string `json:"sample_rate"`
-	BaseURL    string `json:"base_url"`
-	PlugDevice string `json:"plug_device_id"`
-	creds      *credentials.Credentials
-	hbClient   *homebridge.Homebridge
+	DACName    string            `json:"dac_name"`
+	SampleRate string            `json:"sample_rate"`
+	BaseURL    string            `json:"base_url"`
+	PlugDevice homebridge.Device `json:"plug_device"`
+
+	creds    *credentials.Credentials
+	hbClient *homebridge.Homebridge
 }
 
-const configPath = "/usr/local/etc/audioSlave/config.json"
+var (
+	configDir  = filepath.Join(os.Getenv("HOME"), ".config", "audioSlave")
+	configPath = filepath.Join(configDir, "config.json")
+)
+
 const keychainService = "audioSlave"
 
 func New() (*Config, error) {
@@ -58,7 +63,7 @@ func createInteractive() (*Config, error) {
 	c := &Config{}
 	reader := bufio.NewReader(os.Stdin)
 
-	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -138,13 +143,12 @@ func createInteractive() (*Config, error) {
 	c.creds = creds
 	c.hbClient = homebridge.New(c.BaseURL, creds)
 
-	// Discover devices
-	devicesList, err := c.hbClient.ListDevices()
+	deviceList, err := c.hbClient.ListDevices()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Homebridge devices: %w", err)
 	}
 
-	if err := c.PromptPlugDeviceSelection(devicesList); err != nil {
+	if err := c.PromptPlugDeviceSelection(deviceList); err != nil {
 		return nil, err
 	}
 
@@ -153,19 +157,35 @@ func createInteractive() (*Config, error) {
 	}
 
 	fmt.Println("✅ Configuration saved!")
-	return c, nil
+	fmt.Println("")
+	fmt.Println("👉 To run the app automatically on startup, use:")
+	fmt.Println("   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.oorrwullie.audioSlave.plist")
+	fmt.Println("")
+	fmt.Println("Or reboot your system — it will auto-start via launchd.")
+	os.Exit(0)
+	return nil, nil
 }
 
-func (c *Config) save() error {
-	f, err := os.Create(configPath)
-	if err != nil {
-		return err
+func (c *Config) PromptPlugDeviceSelection(devices []homebridge.Device) error {
+	if len(devices) == 0 {
+		return fmt.Errorf("no devices found to select from")
 	}
-	defer f.Close()
 
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	return enc.Encode(c)
+	fmt.Println("Available plug devices:")
+	for i, d := range devices {
+		fmt.Printf("[%d] %s (uniqueId: %s)\n", i, d.ServiceName, d.UniqueID)
+	}
+
+	fmt.Print("Select device to control (enter number): ")
+	var devIdx int
+	fmt.Scanln(&devIdx)
+
+	if devIdx < 0 || devIdx >= len(devices) {
+		return fmt.Errorf("invalid device selection")
+	}
+
+	c.PlugDevice = devices[devIdx]
+	return nil
 }
 
 func parseAudioDevices(output string) []string {
@@ -180,49 +200,22 @@ func parseAudioDevices(output string) []string {
 	return devices
 }
 
+func (c *Config) save() error {
+	f, err := os.Create(configPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(c)
+}
+
 // Getters
-func (c *Config) GetBaseURL() string {
-	return c.BaseURL
-}
-
-func (c *Config) GetUIUsername() string {
-	return c.creds.GetUsername()
-}
-
-func (c *Config) GetUIPassword() string {
-	return c.creds.GetPassword()
-}
-
-func (c *Config) GetPlugDeviceID() string {
-	return c.PlugDevice
-}
-
-func (c *Config) GetClient() *homebridge.Homebridge {
-	return c.hbClient
-}
-
-func (c *Config) GetCredentials() *credentials.Credentials {
-	return c.creds
-}
-
-func (c *Config) PromptPlugDeviceSelection(devices []homebridge.Device) error {
-	if len(devices) == 0 {
-		return fmt.Errorf("no devices found to select from")
-	}
-
-	fmt.Println("Available plug devices:")
-	for i, d := range devices {
-		fmt.Printf("[%d] %s (%s)\n", i, d.Name, d.ID)
-	}
-
-	fmt.Print("Select device to control (enter number): ")
-	var devIdx int
-	fmt.Scanln(&devIdx)
-
-	if devIdx < 0 || devIdx >= len(devices) {
-		return fmt.Errorf("invalid device selection")
-	}
-
-	c.PlugDevice = devices[devIdx].ID
-	return nil
-}
+func (c *Config) GetBaseURL() string                       { return c.BaseURL }
+func (c *Config) GetUIUsername() string                    { return c.creds.GetUsername() }
+func (c *Config) GetUIPassword() string                    { return c.creds.GetPassword() }
+func (c *Config) GetPlugDeviceID() string                  { return c.PlugDevice.UniqueID }
+func (c *Config) GetClient() *homebridge.Homebridge        { return c.hbClient }
+func (c *Config) GetCredentials() *credentials.Credentials { return c.creds }

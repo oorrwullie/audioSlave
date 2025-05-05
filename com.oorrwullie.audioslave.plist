@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.oorrwullie.audioslave</string>
+    <string>com.oorrwullie.audioSlave</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -17,9 +17,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/audioSlave.out.log</string>
+    <string>$(HOME)/Library/Logs/audioSlave/audioSlave.out.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/tmp/audioSlave.err.log</string>
+    <string>$(HOME)/Library/Logs/audioSlave/audioSlave.err.log</string>
 </dict>
 </plist>

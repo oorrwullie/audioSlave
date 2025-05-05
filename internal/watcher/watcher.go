@@ -1,11 +1,11 @@
 package watcher
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
@@ -13,80 +13,72 @@ import (
 	"github.com/oorrwullie/audioSlave/internal/homebridge"
 )
 
-func Start(ctx context.Context, cfg *config.Config, hb *homebridge.Homebridge) error {
-	cmd := exec.Command("log", "stream", "--style", "syslog", "--predicate", "eventMessage CONTAINS \"Wake\" OR eventMessage CONTAINS \"Sleep\"")
+// Start launches the lockscreen-watcher binary and listens for LOCKED/UNLOCKED events.
+func Start(ctx context.Context, cfg *config.Config) error {
+	cmd := exec.CommandContext(ctx, "/usr/local/bin/lockscreen-watcher")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start log stream: %w", err)
+		return fmt.Errorf("failed to start lockscreen-watcher: %w", err)
 	}
 
-	buf := make([]byte, 4096)
-
-	for {
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
 			_ = cmd.Process.Kill()
 			return nil
 		default:
-			n, err := stdout.Read(buf)
-			if err != nil {
-				return fmt.Errorf("error reading log output: %w", err)
+			line := strings.TrimSpace(scanner.Text())
+			switch strings.ToUpper(line) {
+			case "LOCKED":
+				log.Println("🔒 macOS Locked")
+				log.Println("Turning OFF plug.")
+				triggerPlug(cfg.GetClient(), cfg.PlugDevice, false)
+			case "UNLOCKED":
+				log.Println("🔓 macOS Unlocked")
+				time.Sleep(2 * time.Second)
+				if ok, _ := dacConnectedAndCorrectSampleRate(cfg); ok {
+					log.Println("✅ DAC ready. Turning ON plug.")
+					triggerPlug(cfg.GetClient(), cfg.PlugDevice, true)
+				} else {
+					log.Println("❌ DAC not ready. Not turning on plug.")
+				}
+			default:
+				log.Printf("ℹ️ Unrecognized lockscreen-watcher output: %s", line)
 			}
-			output := string(buf[:n])
-			processLogOutput(cfg, hb, output)
 		}
 	}
-}
 
-func processLogOutput(cfg *config.Config, hb *homebridge.Homebridge, output string) {
-	output = strings.ToLower(output)
-	if strings.Contains(output, "wake") {
-		log.Println("Detected Unlock/Wake Event")
-		time.Sleep(2 * time.Second)
-		if ok, _ := dacConnectedAndCorrectSampleRate(cfg); ok {
-			log.Println("DAC connected and correct sample rate. Turning ON plug.")
-			triggerPlug(hb, cfg.GetPlugDeviceID(), true)
-		} else {
-			log.Println("DAC not ready. Not turning on plug.")
-		}
-	} else if strings.Contains(output, "sleep") {
-		log.Println("Detected Lock/Sleep Event")
-		log.Println("Turning OFF plug.")
-		triggerPlug(hb, cfg.GetPlugDeviceID(), false)
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("scanner error: %w", err)
 	}
+
+	return nil
 }
 
+// dacConnectedAndCorrectSampleRate calls the dac-checker binary to validate DAC connection and sample rate.
 func dacConnectedAndCorrectSampleRate(cfg *config.Config) (bool, error) {
-	out, err := exec.Command("system_profiler", "SPAudioDataType").Output()
+	cmd := exec.Command("/usr/local/bin/dac-checker", cfg.DACName, cfg.SampleRate)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return false, err
-	}
-	output := string(out)
-
-	if !strings.Contains(output, cfg.DACName) || !strings.Contains(output, "Transport: USB") {
+		log.Printf("❌ dac-checker error: %v, output: %s", err, string(output))
 		return false, nil
 	}
-
-	re := regexp.MustCompile(`Current SampleRate:\s*(\d+)`)
-	matches := re.FindStringSubmatch(output)
-	if len(matches) < 2 {
-		return false, nil
-	}
-
-	return matches[1] == cfg.SampleRate, nil
+	return strings.TrimSpace(string(output)) == "READY", nil
 }
 
-func triggerPlug(hb *homebridge.Homebridge, deviceID string, on bool) {
-	if err := hb.TogglePlug(deviceID, on); err != nil {
-		log.Printf("Failed to toggle plug: %v", err)
+// triggerPlug toggles the smart plug via Homebridge.
+func triggerPlug(hb *homebridge.Homebridge, device homebridge.Device, on bool) {
+	if err := hb.TogglePlug(device, on); err != nil {
+		log.Printf("❌ Failed to toggle plug: %v", err)
 	} else {
 		state := "off"
 		if on {
 			state = "on"
 		}
-		log.Printf("Plug turned %s", state)
+		log.Printf("✅ Plug turned %s", state)
 	}
 }

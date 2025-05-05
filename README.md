@@ -1,18 +1,20 @@
 # audioSlave
 
-**audioSlave** is a lightweight Go service that monitors your MacBook's lock/unlock state and automatically controls a HomeKit plug based on your DAC connection status.
+**audioSlave** is a lightweight Go service that monitors your Mac’s lock/unlock state and automatically controls a HomeKit plug based on your DAC connection status.
 
 ---
 
 ## ✨ Features
 
-- Detects Mac unlock (Wake) and lock (Sleep) events
-- Checks if a specific DAC (Digital-to-Analog Converter) is connected
-- Verifies that the DAC is running at the desired sample rate (e.g., 384000 Hz)
-- Turns ON a HomeKit smart plug on unlock if DAC is ready
-- Turns OFF the smart plug on lock
-- Simple `configure` wizard to set up without editing files manually
-- Runs automatically at login via LaunchAgent
+- Detects macOS lock/unlock events (using `lockscreen-watcher`)
+- Verifies that a specific DAC (Digital-to-Analog Converter) is:
+  - Connected
+  - Operating at a specific sample rate (via `dac-checker`)
+- Turns **ON** a HomeKit smart plug on unlock if DAC is ready
+- Turns **OFF** the plug on lock
+- Easy `configure` wizard — no file editing needed
+- Auto-starts on login using a LaunchAgent
+- Supports log rotation with `newsyslog`
 
 ---
 
@@ -27,7 +29,9 @@ cd audioSlave
 
 ### 2. Install dependencies
 
-Make sure you have [Go](https://golang.org/dl/) installed.
+You’ll need [Go](https://golang.org/dl/) and [Swift](https://developer.apple.com/xcode/) (pre-installed on macOS).
+
+Install Go using Homebrew if needed:
 
 ```bash
 brew install go
@@ -40,10 +44,12 @@ make install
 ```
 
 This will:
-- Build the `audioSlave` binary
-- Move it to `/usr/local/bin/`
-- Set up the configuration folder `/usr/local/etc/audioSlave/`
-- Install and load the LaunchAgent
+
+- Build the `audioSlave`, `lockscreen-watcher`, and `dac-checker` binaries
+- Install them into `/usr/local/bin`
+- Copy the LaunchAgent to `~/Library/LaunchAgents`
+- Install the log rotation config to `/etc/newsyslog.d/`
+- Create a log directory at `/tmp/audioSlave-logs/`
 
 ---
 
@@ -52,37 +58,73 @@ This will:
 After installing, run:
 
 ```bash
-audioSlave configure
+make configure
 ```
 
 This will guide you through:
+
 - Selecting your DAC device
 - Setting the expected sample rate
-- Entering your Homebridge base URL
+- Providing your Homebridge base URL and credentials
+- Selecting the HomeKit plug to control
+
+Your configuration will be saved to:
+
+```bash
+~/.config/audioSlave/config.json
+```
+
+Credentials are stored securely in your macOS Keychain.
 
 ---
 
 ## 📋 Commands
 
-| Command              | Description                                |
-|----------------------|--------------------------------------------|
-| `make install`       | Build and install the app and LaunchAgent  |
-| `make uninstall`     | Remove all installed components            |
-| `make clean`         | Remove local build artifacts               |
-| `make configure`     | Run the configuration wizard               |
-| `audioSlave`         | Start the service manually                 |
+| Command              | Description                                     |
+|----------------------|-------------------------------------------------|
+| `make install`       | Build and install the app and helpers           |
+| `make configure`     | Run interactive setup wizard                    |
+| `make uninstall`     | Remove binaries and LaunchAgent (preserves config) |
+| `make reset`         | Delete config and credentials                   |
+| `make rotate-logs`   | Manually trigger log rotation                   |
+| `make clean`         | Remove build artifacts and logs                 |
+| `audioSlave`         | Run the service manually (for debugging)        |
 
 ---
 
-## 🖥 Auto Start on Boot
+## 🖥 Auto Start on Login
 
-`audioSlave` installs a LaunchAgent:
+The app installs a `LaunchAgent` here:
 
 ```bash
-~/Library/LaunchAgents/com.oorrwullie.audioslave.plist
+~/Library/LaunchAgents/com.oorrwullie.audioSlave.plist
 ```
 
-This ensures that `audioSlave` runs every time you log into your Mac.
+To reload it manually:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.oorrwullie.audioSlave.plist || true
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.oorrwullie.audioSlave.plist
+```
+
+Or simply reboot your Mac. ✅
+
+---
+
+## 📓 Log Files
+
+Logs are written to:
+
+```bash
+/tmp/audioSlave-logs/audioSlave.out.log
+/tmp/audioSlave-logs/audioSlave.err.log
+```
+
+To rotate logs manually:
+
+```bash
+make rotate-logs
+```
 
 ---
 

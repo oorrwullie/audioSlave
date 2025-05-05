@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/oorrwullie/audioSlave/internal/config"
-	"github.com/oorrwullie/audioSlave/internal/homebridge"
 	"github.com/oorrwullie/audioSlave/internal/logger"
 	"github.com/oorrwullie/audioSlave/internal/watcher"
 )
@@ -12,7 +11,6 @@ import (
 type App struct {
 	Ctx context.Context
 	Cfg *config.Config
-	HB  *homebridge.Homebridge
 	Log logger.Logger
 }
 
@@ -26,19 +24,16 @@ func New(ctx context.Context) (*App, error) {
 		return nil, err
 	}
 
-	hb := homebridge.New(cfg.GetBaseURL(), cfg.GetCredentials())
-
 	return &App{
 		Ctx: ctx,
 		Cfg: cfg,
-		HB:  hb,
 		Log: log,
 	}, nil
 }
 
 func (a *App) Start() error {
 	a.Log.Info("🚀 Starting AudioSlave...")
-	return watcher.Start(a.Ctx, a.Cfg, a.HB)
+	return watcher.Start(a.Ctx, a.Cfg)
 }
 
 func (a *App) Shutdown() {
